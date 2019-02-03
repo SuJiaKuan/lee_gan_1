@@ -1,3 +1,4 @@
+import argparse
 import os
 import datetime
 
@@ -6,6 +7,8 @@ import numpy as np
 import tensorflow as tf
 
 from anime import read_data_set
+from loss import BasicLoss
+from loss import LeastSquaresLoss
 from networks import generator
 from networks import discriminator
 from config import Z_DIMENSIONS
@@ -16,7 +19,34 @@ from config import G_UPDATE
 from config import RESULT_ROOT
 
 
-def main():
+class GAN(object):
+    BASIC = 'basic'
+    LSGAN = 'lsgan'
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        "Training for Generative Adversarial Network",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+
+    gan_choices = [
+        GAN.BASIC,
+        GAN.LSGAN,
+    ]
+
+    parser.add_argument("-g",
+                        "--gan",
+                        type=str,
+                        default=GAN.BASIC,
+                        dest="gan",
+                        help="GAN to be trained",
+                        choices=gan_choices)
+
+    return parser.parse_args()
+
+
+def main(gan):
     # Load anime data set.
     anime = read_data_set()
 
@@ -29,27 +59,28 @@ def main():
                                    shape=[None, 64, 64, 3],
                                    name='x_placeholder')
 
+    if gan == GAN.BASIC:
+        ranged_output = True
+    elif gan == GAN.LSGAN:
+        ranged_output = True
+
     # The generated images.
     g_z = generator(z_placeholder, BATCH_SIZE, Z_DIMENSIONS)
     # The discriminator prediction probability for the real images.
-    d_x = discriminator(x_placeholder)
+    d_x = discriminator(x_placeholder, ranged_output)
     # The discriminator prediction probability for the generated images.
-    d_g = discriminator(g_z, reuse_variables=True)
+    d_g = discriminator(g_z, ranged_output, reuse_variables=True)
+
+    if gan == GAN.BASIC:
+        loss = BasicLoss(d_x, d_g)
+    elif gan == GAN.LSGAN:
+        loss = LeastSquaresLoss(d_x, d_g, 0, 1, 1)
 
     # Two Loss Functions for discriminator.
-    d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
-        logits=d_x,
-        labels=tf.ones_like(d_x),
-    ))
-    d_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
-        logits=d_g,
-        labels=tf.zeros_like(d_g),
-    ))
+    d_loss_real = loss.d_loss_real()
+    d_loss_fake = loss.d_loss_fake()
     # Loss function for generator.
-    g_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
-        logits=d_g,
-        labels = tf.ones_like(d_g),
-    ))
+    g_loss = loss.g_loss()
 
     # Get the varaibles for different network.
     tvars = tf.trainable_variables()
@@ -151,4 +182,6 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    args = parse_args()
+
+    main(args.gan)

@@ -5,7 +5,7 @@ def weights_initializer(stddev=0.02):
     return tf.truncated_normal_initializer(stddev=stddev)
 
 
-def discriminator(images, reuse_variables=None):
+def discriminator(images, ranged_output, reuse_variables=None):
      with tf.variable_scope(tf.get_variable_scope(), reuse=reuse_variables) as scope:
         # Convolution to 32 x 32 x 32.
         d_w1 = tf.get_variable('d_w1',
@@ -77,7 +77,9 @@ def discriminator(images, reuse_variables=None):
         d5 = tf.reshape(d4, [-1, 4 * 4 * 256])
         d5 = tf.matmul(d5, d_w5)
         d5 = d5 + d_b5
-        g5 = tf.sigmoid(d5)
+
+        if ranged_output:
+            g5 = tf.sigmoid(d5)
 
         return d5
 
